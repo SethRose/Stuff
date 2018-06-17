@@ -1,0 +1,1011 @@
+<html>
+	<head>
+		<title>Database (Beyond)</title>
+		<link rel="icon" href="/faceicons/favicon.png">
+		<style>
+			body {
+				background-color: black;
+				margin: 0 0 0 0;
+			}
+			div {
+				display: block;
+				float: left;
+				height: auto;
+				width: 100%;
+				color: white;
+			}
+			div.contextMenu {
+				position: fixed;
+				z-index: 1;
+				width: auto;
+				background-color: black;
+				cursor: default;
+			}
+			
+			iframe {
+				height: 100%;
+				width: 100%;
+				border: none;
+			}
+
+			.mtitle{
+				cursor: default;
+				pointer-events: none;
+				white-space: nowrap;
+				overflow-x: hidden;
+				width: 100%;
+				height: 24px;
+			}
+			
+			.gutter {
+				background-color: #d3d3d3;
+			}
+			
+			.gutter.gutter-horizontal{
+				height: 100%;
+				cursor: ew-resize;
+			}
+			
+			.Red{
+				background-color:red;
+				border-color:red;
+			}
+
+			.Button{
+				outline:0;
+			}
+
+			.modal {
+				pointer-events: auto;
+				z-index: 1000;
+				position: fixed;
+				width: auto;
+				overflow: auto;
+				background-color: rgb(0,0,0);
+				background-color: rgba(50,50,50,0.8);
+				
+				cursor: default;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+
+			span {
+				cursor: pointer;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+			
+			iframe {
+				background-color: black;
+				color: white;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="main"></div>
+	
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="http://www.myersdaily.org/joseph/javascript/md5.js"></script>
+		<script src="http://nathancahill.github.io/Split.js/split.js"></script>
+		<script src="https://cdn.rawgit.com/viliusle/Hermite-resize/master/dist/hermite.js"></script>
+		<script src="http://www.lalit.org/wordpress/wp-content/uploads/2008/05/fontdetect.js"></script>
+		<script src="https://unpkg.com/react@15.3.2/dist/react.js"></script>
+		<script src="https://unpkg.com/react-dom@15.3.2/dist/react-dom.js"></script>
+		<script src="https://unpkg.com/babel-core@5.8.38/browser.min.js"></script>
+		
+		<script type='text/babel'>
+		var socket = io('/database');
+
+		var title = 'Database (Beyond)';
+
+		socket.on('Title', function(message){
+			document.title = 'Database ('+message+')';
+			title = 'Database ('+message+')';
+		});
+		
+		//Properties: socket
+		var OuterArea = React.createClass({
+			getInitialState: function() {
+				return {username: '', permissions: 'Guest', directory: {name: "database", creator: "", contents: {}, order: []}, page: '', openness: {}, showNames: false, loginState: 'Guest'};
+			},
+		
+			componentDidMount: function() {
+				var that = this;
+				Split(["#Directory", "#Content"], {minSize: [0, 0]});
+				document.getElementById('Directory').style.width = "calc(20% - 5px)";
+				document.getElementById('Content').style.width = "calc(80% - 5px)";
+				
+				//Initialize socket event listeners
+				this.props.socket.on('CloseModal', function() {
+					that.setState({modal: null});
+				});
+				this.props.socket.on('UpdateDatabase', function (directory) {
+					that.setState({directory: directory});
+					document.getElementById('iFrame').contentWindow.location.reload(true);
+				});
+				this.props.socket.on('UpdateError', function (err_msg) {
+					alert(err_msg);
+				});
+				this.props.socket.on('SetUsername', function (username, permissions, password) {
+					//password is already in md5, this means we had a successful connection.
+					that.setState({username: username, pass: password, permissions: permissions, loginState: username});
+				});
+				this.props.socket.on('SetPermissions', function (permissions) {
+					that.setState({permissions: permissions});
+				});
+				this.props.socket.on('disconnect', function() {
+					that.setState({loginState:'Disconnected'});
+				});
+				this.props.socket.on('reconnect', function() {
+					that.props.socket.emit('DatabaseLogin', that.state.username, that.state.pass, function (response){
+						console.log(response);
+					});
+				});
+
+				if(document.cookie && document.cookie.match(/[; ^]?username=([^\s;]*)/)){
+					var username = decodeURIComponent(document.cookie.match(/[; ^]?username=([^\s;]*)/)[1]);
+					var password = decodeURIComponent(document.cookie.match(/[; ^]?password=([^\s;]*)/)[1]);
+					this.props.socket.emit('DatabaseLogin', username, md5(password), function (response){
+						console.log(response);
+					});
+				}
+			},
+			
+			GetDirectoryFromPath: function(path) {
+				var ret_val = this.state.directory;
+				for(var i = 0; i < path.length; i++) {
+					if(!("contents" in ret_val) || !(path[i] in ret_val.contents)) {
+						return undefined;
+					}
+					ret_val = ret_val.contents[path[i]];
+				}
+				return ret_val;
+			},
+			
+			closeContext: function(e) {
+				this.setState({context: null});
+			},
+			
+			AddDirectory: function(e) {
+				var path = this.state.context.path;
+				var modal = <AddDirectoryModal socket={this.props.socket} path={path} outerarea={this} />;
+				this.setState({context: null, modal: modal});
+			},
+			
+			AddEntry: function(e) {
+				var path = this.state.context.path;
+				var pathname = 'database/';
+				for(var i = 0; i < path.length; i++)
+					pathname += path[i] + '/';
+				var modal = <EditEntryModal socket={this.props.socket} path={path} funcname='add' titletext={'Creating new entry in ' + pathname} outerarea={this} />;
+				this.setState({modal: modal, context: null});
+			},
+			
+			DeleteEntry: function(e) {
+				var path = this.state.context.path;
+				var modal = <DeleteEntryModal socket={this.props.socket} path={path} outerarea={this} />;
+				this.setState({context: null, modal: modal});
+			},
+			
+			EditEntry: function(e) {
+				var path = this.state.context.path;
+				var pathname = 'database';
+				for(var i = 0; i < path.length; i++)
+					pathname += '/' + path[i];
+				pathname += '.html';
+				var modal = <EditEntryModal socket={this.props.socket} path={path} funcname='edit' titletext={'Editing ' + pathname} outerarea={this} />;
+				this.setState({modal: modal, context: null});
+			},
+			
+			OpenEntry: function(e) {
+				var path = this.state.context.path;
+				var pathname = '/database';
+				for(var i = 0; i < path.length; i++)
+					pathname += '/' + encodeURIComponent(path[i]);
+				window.open(pathname + '.html');
+				this.setState({context: null});
+			},
+			
+			MoveEntry: function(e) {
+				var modal = <MoveEntryModal socket={this.props.socket} path={this.state.context.path} outerarea={this} />;
+				this.setState({context: null, modal: modal});
+			},
+			
+			RenameDirectory: function(e) {
+				var modal = <RenameDirectoryModal socket={this.props.socket} path={this.state.context.path} outerarea={this} locked={this.state.context.locked} />;
+				this.setState({context: null, modal: modal});
+			},
+			
+			LockDirectory: function(e) {
+				var path = this.state.context.path;
+				var modal = <LockDirectoryModal socket={this.props.socket} path={path} outerarea={this} locked={this.state.context.locked} />;
+				this.setState({context: null, modal: modal});
+			},
+			
+			OpenSearchModal: function(e) {
+				var modal = <SearchDirectoryModal socket={this.props.socket} outerarea={this} />;
+				this.setState({context: null, modal: modal});
+			},
+			
+			ToggleNames: function(e) {
+				this.setState({showNames: !this.state.showNames});
+			},
+			
+			AttemptLogin: function(e) {
+				var modal = <LoginModal socket={this.props.socket} outerarea={this} />;
+				this.setState({context: null, modal: modal});
+			},
+
+			entryDragStart: function(e) {
+				if(this.state.username && this.state.permissions === 'Admin' && e.target.id != JSON.stringify([this.state.directory.name])) {
+					e.stopPropagation();
+					e.dataTransfer.setData("text", 'n');
+					var handler = document.getElementById("Directory");
+					handler.addEventListener("dragover", this.entryDragOver, false);
+					handler.addEventListener("dragend", this.entryDragEnd, false);
+					handler.addEventListener("drop", this.entryDrop, false);
+					this.setState({draggedElem: e.target});
+				}
+			},
+
+			entryDragEnd: function(e) {
+				e.preventDefault();
+				var handler = document.getElementById("Directory");
+				handler.removeEventListener("dragover", this.entryDragOver, false);
+				handler.removeEventListener("dragend", this.entryDragEnd, false);
+				handler.removeEventListener("drop", this.entryDrop, false);
+				this.setState({draggedElem: null});
+			},
+
+			entryDragOver: function(e) {
+				if(e.target.className === "databaseEntry" && this.state.draggedElem.id != e.target.id) {
+					e.preventDefault();
+				}
+			},
+
+			entryDrop: function(e) {
+				console.log("Fired Drop event.");
+				e.preventDefault();
+				var rect = e.target.getBoundingClientRect();
+				var where = (e.clientY - rect.top) * 2 > (rect.bottom - rect.top); //If true, it's below, else it's above.
+				var fromPath = JSON.parse(this.state.draggedElem.id);
+				var toPath = JSON.parse(e.target.id);
+				this.props.socket.emit('DragEntry', fromPath, toPath, where);
+			},
+			
+			render: function() {
+				var context = null;
+				if(this.state.context) { //context should have keys x, y, path, functions; functions include AddDirectory, AddEntry, Delete, Edit
+					var contextOptions = [];
+					if(this.state.context.functions.includes("AddDirectory")) {
+						contextOptions.push(<div key="AddDirectory" onClick={this.AddDirectory}>Add Directory</div>);
+					}
+					if(this.state.context.functions.includes("AddEntry")) {
+						contextOptions.push(<div key="AddEntry" onClick={this.AddEntry}>Add Entry</div>);
+					}
+					if(this.state.context.functions.includes("RenameDirectory")) {
+						contextOptions.push(<div key="RenameDirectory" onClick={this.RenameDirectory}>Edit</div>);
+					}
+					if(this.state.context.functions.includes("Delete")) {
+						contextOptions.push(<div key="Delete" onClick={this.DeleteEntry}>Delete</div>);
+					}
+					if(this.state.context.functions.includes("Edit")) {
+						contextOptions.push(<div key="Edit" onClick={this.EditEntry}>Edit</div>);
+					}
+					if(this.state.context.functions.includes("Move")) {
+						contextOptions.push(<div key="Move" onClick={this.MoveEntry}>Move To...</div>);
+					}
+					if(this.state.context.functions.includes("Open")) {
+						contextOptions.push(<div key="Open" onClick={this.OpenEntry}>Open in New Tab</div>);
+					}
+					if(this.state.context.functions.includes("Lock/Unlock")) {
+						contextOptions.push(<div key="Lock/Unlock" onClick={this.LockDirectory}>{this.state.context.locked ? 'Unlock' : 'Lock'}</div>);
+					}
+					context = <div className="contextMenu" style={{left: this.state.context.x + "px", top: this.state.context.y + "px"}}>{contextOptions}</div>;
+				}
+				var searchButton = <button key="SearchButton" onClick={this.OpenSearchModal} disabled={this.state.modal ? true : false} style={{zIndex: "500", position: "fixed", left: "0px", bottom: "0px"}}>Search</button>;
+				var toggleNamesButton = <button key="ToggleNames" onClick={this.ToggleNames} style={{zIndex: "500", position: "fixed", left: "54px", bottom: "0px"}}>Toggle Names</button>
+				var loginButton = <button key="LoginButton" onClick={this.AttemptLogin} disabled={this.state.modal ? true : false} style={{zIndex: "500", position: "fixed", left: "160px", bottom: "0px"}}>Login</button>
+				var status = (<div ref="statusbar" key="LoginStatus" id="LoginStatus" className="mtitle" style={{height: "18px"}}>Login: {this.state.loginState}</div>);
+				var dir = (<div key="Directory" id="Directory" style={{height: "calc(100% - 20px)", overflowY: "auto"}}>{status}<DirectoryList outerarea={this} socket={this.props.socket} name={this.state.directory.name} creator={this.state.directory.creator} contents={this.state.directory.contents} locked={this.state.directory.locked} order={this.state.directory.order} parents={[]} /></div>);
+				var content = (<div key="Content" id="Content"><iframe id="iFrame" src={this.state.page}><p>An error occured while displaying {this.state.page}</p></iframe></div>);
+				return(<div onClick={this.closeContext} onContextMenu={this.closeContext}>{context ? context : ""}{this.state.modal ? this.state.modal : ""}{dir}{content}{searchButton}{toggleNamesButton}{loginButton}</div>);
+			}
+		});
+		
+		//Properties: socket, name, creator, contents, parents
+		var DirectoryList = React.createClass({
+			getInitialState: function() {
+				var path = this.props.parents.concat([this.props.name]);
+				var openness = this.props.outerarea.state.openness;
+				return {open: path.toString() in openness ? openness[path.toString()] : false};
+			},
+			
+			toggleOpen: function(e) {
+				var path = this.props.parents.concat([this.props.name]);
+				var openness = this.props.outerarea.state.openness;
+				openness[path.toString()] = !openness[path.toString()];
+				this.props.outerarea.setState({openness: openness});
+				this.setState({open: !this.state.open});
+				var movemodal = this.props.outerarea.state.movemodal;
+				if(movemodal) {
+					movemodal.setState({clickedDirectory: this});
+				}
+			},
+			
+			onContextMenu: function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if(this.props.outerarea.state.modal || (this.props.locked && this.props.outerarea.state.permissions !== 'Admin')) {
+					this.props.outerarea.setState({context: null});
+					return;
+				}
+				var path = this.props.parents.concat([this.props.name]);
+				path.splice(0, 1);
+				var funcs = [];
+				if(this.props.outerarea.state.username) {
+					funcs.push("AddEntry");
+					if(this.props.outerarea.state.permissions === 'Admin') {
+						funcs.push("AddDirectory");
+						funcs.push("Lock/Unlock");
+						if(this.props.parents.length) {
+							funcs.push("Delete");
+							funcs.push("Move");
+							funcs.push("RenameDirectory");
+						}
+					}
+				}
+				var context = {x: e.clientX, y: e.clientY, path: path, functions: funcs, locked: this.props.locked};
+				this.props.outerarea.setState({context: context});
+			},
+			
+			render: function() {
+				if(this.state.open) {
+					var name = <b><div draggable id={JSON.stringify(this.props.parents.concat([this.props.name]).slice(1))} className="databaseEntry" onDragStart={this.props.outerarea.entryDragStart} onClick={this.toggleOpen} onContextMenu={this.onContextMenu}>{"\xA0".repeat(this.props.parents.length*4)}{this.props.name} [&#8209;]</div></b>
+					var children = [];
+					var parents = this.props.parents.concat([this.props.name]);
+					for(var i = 0; i < this.props.order.length; i++) {
+						var entry_name = this.props.order[i];
+						var entry = this.props.contents[entry_name];
+						if("contents" in entry) {
+							children.push(<DirectoryList key={entry_name} outerarea={this.props.outerarea} socket={this.props.socket} name={entry.name} creator={entry.creator} contents={entry.contents} locked={entry.locked} order={entry.order} parents={parents} />)
+						} else {
+							children.push(<Entry key={entry_name} outerarea={this.props.outerarea} socket={this.props.socket} name={entry.name} creator={entry.creator} parents={parents} />)
+						}
+					}
+					return(<div>{name}<br />{children}</div>);
+				} else {
+					return(<b><div draggable id={JSON.stringify(this.props.parents.concat([this.props.name]).slice(1))} className="databaseEntry" onDragStart={this.props.outerarea.entryDragStart} onClick={this.toggleOpen} onContextMenu={this.onContextMenu}>{"\xA0".repeat(this.props.parents.length*4)}{this.props.name} [+]<br /></div></b>);
+				}
+			}
+		});
+		
+		//Properties: socket, name, creator, parents
+		var Entry = React.createClass({
+			navigateTo: function(e) {
+				var pathname = "/";
+				for(var i = 0; i < this.props.parents.length; i++) {
+					pathname += encodeURIComponent(this.props.parents[i]) + "/";
+				}
+				this.props.outerarea.setState({page: pathname + encodeURIComponent(this.props.name) + ".html"});
+			},
+			
+			onContextMenu: function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if(this.props.outerarea.state.modal)
+					return;
+				var path = this.props.parents.concat([this.props.name]);
+				path.splice(0, 1);
+				var funcnames = ['Open'];
+				if(this.props.outerarea.state.username) {
+					if(this.props.outerarea.state.permissions === 'Admin' || this.props.creator === this.props.outerarea.state.username) {
+						funcnames = ['Delete', 'Edit', 'Open'];
+					}
+					if(this.props.outerarea.state.permissions === 'Admin') {
+						funcnames.push('Move');
+					}
+				}
+				var context = {x: e.clientX, y: e.clientY, path: path, functions: funcnames};
+				this.props.outerarea.setState({context: context});
+			},
+			
+			render: function() {
+			return(<div draggable id={JSON.stringify(this.props.parents.concat([this.props.name]).slice(1))} className="databaseEntry" onDragStart={this.props.outerarea.entryDragStart} onClick={this.navigateTo} onContextMenu={this.onContextMenu}>{"\xA0".repeat(this.props.parents.length*4)}{this.props.name}{this.props.outerarea.state.showNames ? " (By " + this.props.creator + ")" : ""}</div>);
+			}
+		});
+
+		//drag functionality is common across modals.
+		var startDrag = function(e){
+			if(e.target.getAttribute('class') == "modal"){//only START for the modal containers.
+				e.stopPropagation();
+				e.preventDefault();
+				var rect = this.refs['this'].getBoundingClientRect();
+				if(rect.right-e.clientX < 20 && rect.bottom-e.clientY < 20){
+					this.setState({initialposition: {x: e.clientX, y: e.clientY}, resize: true});
+				} else {
+					this.setState({initialposition: {x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY}, resize: false});
+				}
+				document.addEventListener('mousemove', this.drag);
+				document.addEventListener('mouseup', this.stopDrag);
+				document.getElementById('iFrame').style.pointerEvents = "none";
+			}
+		};
+
+		var drag = function(e){
+			e.stopPropagation();
+			e.preventDefault();
+			var initpos = this.state.initialposition;
+			var x = e.clientX-initpos.x;
+			var y = e.clientY-initpos.y;
+			var rect = this.refs['this'].getBoundingClientRect();
+			if(this.state.resize){
+				x = x+this.state.width;
+				y = y+(this.state.height || 0);
+				if(this.state.minwidth > +x){x = this.state.minwidth;}
+				if(this.state.minheight && this.state.minheight > +y){y = this.state.minheight;}
+				if(x+rect.left > document.body.clientWidth){x=document.body.clientWidth-rect.left;}
+				if(y+rect.top > document.body.clientHeight){y=document.body.clientHeight-rect.top;}
+				this.setState({width: x, height: y, initialposition: {x: e.clientX, y: e.clientY}});
+			} else {
+				if(x < 0){x=0;} if(y < 0){y=0;}
+				if(x+rect.width > document.body.clientWidth){x=document.body.clientWidth-rect.width;}
+				if(y+rect.height > document.body.clientHeight){y=document.body.clientHeight-rect.height;}
+				this.setState({x: x, y: y});
+			}
+		};
+
+		var stopDrag = function(e){
+			e.stopPropagation();
+			e.preventDefault();
+			document.removeEventListener('mousemove', this.drag);
+			document.removeEventListener('mouseup', this.stopDrag);
+			document.getElementById('iFrame').style.pointerEvents = "auto";
+		};
+		
+		//Properties: socket, path, funcname, titletext, outerarea
+		var EditEntryModal = React.createClass({
+			getInitialState: function() {
+				if(this.props.funcname === 'edit') {
+					var path = this.props.path;
+					var pathname = '/database';
+					for(var i = 0; i < path.length; i++)
+						pathname += '/' + encodeURIComponent(path[i]);
+					pathname = pathname + '.html';
+					var that = this;
+					this.props.socket.emit('RequestEntry', pathname, function(page) {
+						that.setState({defaultText: page.replace(/<br \/>/g, "\n")});
+					});
+				} else {
+					return {defaultText: '<html><body style="color:white;background-color:black;">\nYour Message Here\n</body></html>', x: 100, y: 100, width: 300, height: 200, minheight: 110, minwidth: 220};
+				}
+				return {x: 100, y: 100, width: 300, height: 200, minheight: 110, minwidth: 220};
+			},
+			
+			OKButton: function(e) {
+				var path = this.props.path;
+				switch(this.props.funcname) {
+					case 'add':
+						if(this.refs.inputName.value) {
+							this.props.socket.emit('AddEntry', path, this.refs.inputName.value, this.props.outerarea.state.username, this.CleanContent());
+						}
+						break;
+					case 'edit':
+						var name = this.refs.inputName.value;
+						var oldname = this.props.path[this.props.path.length - 1];
+						var content = this.CleanContent();
+						if(content === this.state.defaultText) {
+							content = null;
+						}
+						if(name === oldname) {
+							name = null;
+						}
+						if(name || content)
+							socket.emit('EditEntry', this.props.path, name, content);
+						break;
+				}
+			},
+			
+			CancelButton: function(e) {
+				if(this.refs['textArea'].value && this.refs.Cancel.className != "Red Button"){
+					this.refs.Cancel.className = "Red Button";
+					this.refs.textArea.style['border-color'] = 'red';
+					this.refs.textArea.style['outline-color'] = 'red';
+				} else {
+					this.props.outerarea.setState({modal: undefined});
+				}
+			},
+
+			PreviewButton: function(){
+				var frame = "<body style='margin: 0'><iframe width='100%' height='100%' src='data:text/html," + encodeURIComponent(this.CleanContent()).replace(/'/g,"%27") + "'></iframe></body>";
+				var myw = window.open();
+				myw.document.open();
+				myw.document.write(frame);
+				myw.document.close();
+			},
+			
+			CleanContent: function() {
+				var content = this.refs.textArea.value;
+				content = content.replace(/\r\n?|\n(?!([^<]+)?(<\/style>|<\/script>))/g, "<br />");
+				return content;
+			},
+
+			TypeCheck: function(){
+				if(this.refs.Cancel.className = "Red Button"){
+					this.refs.Cancel.className = "";
+					this.refs.textArea.style['border-color'] = '';
+					this.refs.textArea.style['outline-color'] = '';
+				}
+			},
+			
+			render: function() {
+				if((typeof this.state.defaultText) === "string") {
+					var titlebar = <div key='titlebar' className="mtitle">{this.props.titletext}</div>;
+					var buttonOK = <button key='buttonOK' type="button" style={{textAlign: "center"}} onClick={this.OKButton}>OK</button>;
+					var buttonCancel = <button key='buttonCancel' type="button" ref="Cancel" style={{textAlign: "center"}} onClick={this.CancelButton}>Cancel</button>;
+					var buttonPreview = <button key='buttonPreview' type="button" style={{textAlign: "center"}} onClick={this.PreviewButton}>Preview</button>;
+					var textArea = <textarea key='textArea' ref="textArea" style={{resize: 'none', width:'100%', height:"calc(100% - 77px)", minHeight:32}} defaultValue={this.state.defaultText} autoFocus onKeyDown={this.TypeCheck}></textarea>;
+					var labelName = <div key='labelName' style={{width: "20%", height: "24px", margin: "4px 0px"}}>Name:</div>;
+					var inputName = <input key='inputName' type="text" ref="inputName" style={{width: "80%", height: "24px", margin: "4px 0px"}} defaultValue={this.props.funcname === 'edit' ? this.props.path[this.props.path.length-1] : ""}></input>;
+					var draghandle = <img src='/faceicons/handle.png' width='20px' height='20px' style={{position: 'absolute', right:0, bottom: 0, pointerEvents:'none'}}/>;
+					return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y, width: this.state.width, height: this.state.height}}>
+								{titlebar}<br />
+								{labelName}{inputName}<br />
+								{textArea}<br />
+								{buttonOK}{buttonCancel}{buttonPreview}{draghandle}
+							</div>);
+				} else {
+					return <div className="modal" style={{display: "none"}}></div>;
+				}
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+		
+		var DeleteEntryModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100};
+			},
+			
+			YesButton: function(e) {
+				this.props.socket.emit('DeleteEntry',this.props.path);
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			NoButton: function(e) {
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			render: function() {
+				var filename = this.props.path[this.props.path.length-1];
+				var titlebar = <div key='titlebar' className="mtitle">{'Delete ' + filename}</div>;
+				var labelAreYouSure = <div key='labelAreYouSure' style={{margin: "4 0"}}>{'Are you sure you want to delete ' + filename + '?'}</div>;
+				var buttonYes = <button key='buttonYes' type="button" onClick={this.YesButton}>Yes</button>;
+				var buttonNo = <button key='buttonNo' type="button" onClick={this.NoButton}>No</button>;
+				return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+							{titlebar}<br />
+							{labelAreYouSure}<br />
+							{buttonYes}{buttonNo}
+						</div>);
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+		
+		var AddDirectoryModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100};
+			},
+			
+			OKButton: function(e) {
+				var newname = this.refs.inputName.value;
+				if(newname) {
+					this.props.socket.emit('AddDirectory', this.props.path, newname, this.props.outerarea.state.username, this.refs.checkLocked.checked);
+				}
+			},
+			
+			CancelButton: function(e) {
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			render: function() {
+				var pathname = 'database/';
+				for(var i = 0; i < this.props.path.length; i++)
+					pathname += this.props.path[i] + '/';
+				var titlebar = <div key='titlebar' className="mtitle">{'Add Directory to ' + pathname}</div>;
+				var labelName = <div key='labelName' style={{width: "20%", height: "24px", margin: "4 0"}}>Name: </div>;
+				var inputName = <input key='inputName' ref='inputName' type="text" style={{width: "80%", height: "24px", margin: "4 0"}}></input>;
+				var buttonOK = <button type="button" onClick={this.OKButton}>OK</button>;
+				var buttonCancel = <button type="button" onClick={this.CancelButton}>Cancel</button>;
+				var checkLocked = <div><input key='checkLocked' ref='checkLocked' type="checkbox" style={{color: "white"}}></input>Locked?</div>;
+				return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+							{titlebar}<br />
+							{labelName}{inputName}<br />
+							{checkLocked}<br />
+							{buttonOK}{buttonCancel}
+						</div>);
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+		
+		var MoveEntryModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100};
+			},
+			
+			componentDidMount: function() {
+				this.props.outerarea.setState({movemodal: this});
+			},
+			
+			OKButton: function(e) {
+				var dir = this.state.clickedDirectory;
+				if(dir) {
+					var newpath = dir.props.parents.concat([dir.props.name]);
+					newpath.splice(0, 1);
+					var oldpath = this.props.path;
+					this.props.socket.emit('MoveEntry', oldpath, newpath);
+				}
+				this.props.outerarea.setState({movemodal: null});
+			},
+			
+			CancelButton: function(e) {
+				this.props.outerarea.setState({modal: null, movemodal: null});
+			},
+			
+			render: function() {
+				var dirname = this.props.path[this.props.path.length-1]
+				var titlebar = <div key='titlebar' className="mtitle">{'Move ' + dirname}</div>;
+				var buttonOK = <button key='buttonOK' type="button" onClick={this.OKButton}>OK</button>;
+				var buttonCancel = <button key='buttonCancel' type="button" onClick={this.CancelButton}>Cancel</button>;
+				var labelAsk;
+				if(this.state.clickedDirectory) {
+					labelAsk = <div key='labelAsk'>{'Move to ' + this.state.clickedDirectory.props.name}</div>;
+				} else {
+					labelAsk = <div key='labelAsk'>Select a target directory on the left.</div>;
+				}
+				return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+							{titlebar}<br />
+							{labelAsk}<br />
+							{buttonOK}{buttonCancel}
+						</div>);
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+		
+		var RenameDirectoryModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100};
+			},
+			
+			OKButton: function(e) {
+				var newname = this.refs.inputName.value;
+				var path = this.props.path;
+				if(newname && newname !== path[path.length-1]) {
+					this.props.socket.emit('RenameDirectory', path, newname, this.refs.checkLocked.checked);
+					path[path.length-1] = newname;
+				} else if(this.refs.checkLocked.checked) {
+					this.props.socket.emit('LockDirectory', path);
+				}
+			},
+			
+			CancelButton: function(e) {
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			render: function() {
+				var dirname = this.props.path[this.props.path.length - 1];
+				var titlebar = <div key='titlebar' className="mtitle">{'Rename ' + dirname}</div>;
+				var labelName = <div key='labelName' style={{width: "20%", height: "24px", margin: "4 0"}}>Name: </div>;
+				var inputName = <input key='inputName' ref='inputName' type="text" style={{width: "80%", height: "24px", margin: "4 0"}}></input>;
+				var buttonOK = <button type="button" onClick={this.OKButton}>OK</button>;
+				var buttonCancel = <button type="button" onClick={this.CancelButton}>Cancel</button>;
+				var checkLocked = <div><input key='checkLocked' ref='checkLocked' type="checkbox" style={{color: "white"}}></input>{this.props.locked ? 'Unlock' : 'Lock'}</div>;
+				return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+							{titlebar}<br />
+							{labelName}{inputName}<br />
+							{checkLocked}<br />
+							{buttonOK}{buttonCancel}
+						</div>);
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+		
+		var LockDirectoryModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100};
+			},
+			
+			YesButton: function(e) {
+				this.props.socket.emit('LockDirectory',this.props.path);
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			NoButton: function(e) {
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			render: function() {
+				var filename = this.props.path[this.props.path.length-1];
+				var titlebar = <div key='titlebar' className="mtitle">{(this.props.locked ? 'Unlock ' : 'Lock ') + filename}</div>;
+				var labelAreYouSure = <div key='labelAreYouSure' style={{margin: "4 0"}}>{'Are you sure you want to ' + (this.props.locked ? 'unlock ' : 'lock ') + filename + '?'}</div>;
+				var buttonYes = <button key='buttonYes' type="button" onClick={this.YesButton}>Yes</button>;
+				var buttonNo = <button key='buttonNo' type="button" onClick={this.NoButton}>No</button>;
+				return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+							{titlebar}<br />
+							{labelAreYouSure}<br />
+							{buttonYes}{buttonNo}
+						</div>);
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+
+		var SearchDirectoryModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100, searchResults: []};
+			},
+			
+			componentDidMount: function() {
+				Split(["#Options", "#Results"], {minSize: [0, 0]});
+			},
+			
+			CloseButton: function(e) {
+				this.props.outerarea.setState({modal: null});
+			},
+			
+			SearchButton: function(e) {
+				var database_queue = [[["database"], this.props.outerarea.state.directory]];
+				var titleSearchTrie = BuildTrie(this.refs.searchTitleInput.value);
+				var bodySearchTrie = BuildTrie(this.refs.searchBodyInput.value);
+				this.setState({searchResults: []});
+				while(database_queue.length) {
+					var cur = database_queue.shift();
+					var cur_pathname = cur[0];
+					var cur_entry = cur[1];
+					if(cur_entry.hasOwnProperty("contents")) {
+						for(var key in cur_entry.contents) {
+							database_queue.push([cur_pathname.concat([key]), cur_entry.contents[key]]);
+						}
+					} else {
+						if(SearchForTrie(cur_pathname[cur_pathname.length-1], titleSearchTrie[1], titleSearchTrie[0])) {
+							this.SearchBody(cur_pathname, bodySearchTrie);
+						}
+					}
+				}
+			},
+			
+			SearchBody: function(dirs, bodySearchTrie) {
+				var that = this;
+				var uri = "";
+				for(var i = 0; i < dirs.length; i++) {
+					uri += "/" + encodeURIComponent(dirs[i]);
+				}
+				this.props.socket.emit('RequestEntry', uri + ".html", function(body) {
+					if(SearchForTrie(body, bodySearchTrie[1], bodySearchTrie[0])) {
+						that.setState({searchResults: that.state.searchResults.concat([<SearchResultDiv outerarea={that.props.outerarea} dirs={dirs} key={uri} />])})
+					}
+				});
+			},
+			
+			render: function() {
+				var titlebar = <div key='titlebar' className="mtitle">Search the Database</div>;
+				var searchTitleLabel = <div key='searchTitleLabel'>Title: </div>;
+				var searchTitleInput = <input key='searchTitleInput' ref='searchTitleInput' type='text'></input>;
+				var searchBodyLabel = <div key='searchBodyLabel'>Content: </div>;
+				var searchBodyInput = <input key='searchBodyInput' ref='searchBodyInput' type='text'></input>;
+				var searchButton = <button type='button' onClick={this.SearchButton}>Search</button>;
+				var closeButton = <button type='button' onClick={this.CloseButton}>Close</button>;
+				
+				var options = <div key='Options' id='Options'>
+								{searchTitleLabel}{searchTitleInput}<br />
+								{searchBodyLabel}{searchBodyInput}<br />
+								{searchButton}{closeButton}
+							  </div>;
+				var results = <div key='Results' id='Results' style={{overflowY: 'auto', overflowX: 'auto'}}>{this.state.searchResults}</div>;
+				return <div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+						{titlebar}<br />
+						{options}{results}
+					   </div>;
+			},
+			
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+		
+		var SearchResultDiv = React.createClass({render: function() {
+				var dirs = this.props.dirs;
+				var pagename = dirs[dirs.length - 1];
+				return <div onClick={this.linkPage}>{pagename}</div>;
+			},
+			
+			linkPage: function(e) {
+				var dirs = this.props.dirs;
+				var uri = "";
+				for(var i = 0; i < dirs.length; i++) {
+					uri += "/" + encodeURIComponent(dirs[i]);
+				}
+				this.props.outerarea.setState({page: uri + ".html"});
+			}
+		});
+		
+		//The Modal for trying to log in
+		var LoginModal = React.createClass({
+			getInitialState: function() {
+				return {x: 100, y: 100, title:"Enter your username and password."}
+			},
+
+			OKButton: function(e) {
+				var username = this.refs.inputName.value;
+				var password = this.refs.inputPass.value;
+				if(this.refs.Remember.checked){
+					document.cookie = "username="+encodeURIComponent(username);
+					document.cookie = "password="+encodeURIComponent(password);
+				}
+				var that=this;
+				this.props.socket.emit('DatabaseLogin', username, md5(password), function (response){
+					console.log(response);
+					that.setState({title: response});
+				});
+			},
+
+			CancelButton: function(e) {
+				this.props.outerarea.setState({modal: undefined});
+			},
+
+			componentDidMount: function(){
+				if(document.cookie && document.cookie.match(/[; ^]?username=([^\s;]*)/)){
+					var c = document.cookie;
+					this.refs.inputName.value = decodeURIComponent(c.match(/[; ^]?username=([^\s;]*)/)[1]);
+					this.refs.inputPass.value = decodeURIComponent(c.match(/[; ^]?password=([^\s;]*)/)[1]);
+					this.refs.inputPass.focus();
+				} else {
+					this.refs.inputName.focus();
+				}
+			},
+			
+			enterCheck: function(e){
+				if(e.keyCode == 13){
+					if(e.target.name == 'password'){
+						this.OKButton(e);
+					} else if(e.target.value.length >= 6) {
+						this.refs.inputPass.focus();
+					}
+				}
+			},
+
+			render: function() {
+				var titlebar = <div key='titlebar' className="mtitle">{this.state.title}</div>;
+					var buttonOK = <button key='buttonOK' type="button" style={{width: "50%", height: "24px", textAlign: "center"}} onClick={this.OKButton}>OK</button>;
+					var buttonCancel = <button key='buttonCancel' type="button" style={{width: "50%", height: "24px", textAlign: "center"}} onClick={this.CancelButton}>Cancel</button>;
+					var labelName = <div key='labelName' style={{width: "50%", height: "24px", margin: "4px 0px"}}>Username:</div>;
+					var inputName = <input key='inputName' type="text" ref="inputName" style={{width: "50%", height: "24px", margin: "4px 0px"}} defaultValue="" placeholder="Username" onKeyDown={this.enterCheck}></input>;
+					var labelPass = <div key='labelPass' style={{width: "50%", height: "24px", margin: "4px 0px"}}>Password:</div>;
+					var inputPass = <input key='inputPass' name="password" type="text" ref="inputPass" style={{width: "50%", height: "24px", margin: "4px 0px"}} defaultValue="" placeholder="Password" onKeyDown={this.enterCheck}></input>;
+					var chkRemember = <input type="checkbox" name="Remember" ref="Remember" defaultChecked={false}/>
+					return (<div ref="this" className="modal" onMouseDown={this.startDrag} style={{left: this.state.x, top: this.state.y}}>
+								{titlebar}<br />
+								{labelName}{inputName}<br />
+								{labelPass}{inputPass}<br />
+								{buttonOK}{buttonCancel}<br />
+								{chkRemember}<b>Remember me</b>
+							</div>);
+			},
+
+			startDrag: startDrag,
+
+			drag: drag,
+
+			stopDrag: stopDrag
+		});
+
+		//Functions for searching the Database, using a trie
+		function TrieNode(value) {
+			this.value = value;
+			this.end_state = false;
+			this.children = {};
+		}
+
+		function BuildTrie(wordstring) {
+			var count = 0;
+			var in_quotes = false;
+			var root = new TrieNode('', null);
+			var cur = root;
+			for(var i = 0; i < wordstring.length; i++) {
+				var c = wordstring[i].toLowerCase();
+				if(c == '"') {
+					in_quotes = !in_quotes;
+					if(cur !== root) {
+						cur.end_state = true;
+						count++;
+						cur = root;
+					}
+				} else if(!in_quotes && !c.match(/[0-9A-Za-z]/)) {
+					if(cur !== root) {
+						cur.end_state = true;
+						count++;
+						cur = root;
+					}
+				} else {
+					if(!(cur.children.hasOwnProperty(c))) {
+						cur.children[c] = new TrieNode(c);
+					}
+					cur = cur.children[c];
+				}
+			}
+			if(cur !== root) {
+				cur.end_state = true;
+				count++;
+			}
+			return [count, JSON.stringify(root)];
+		}
+
+		function SearchForTrie(strToSearch, strTrie, numwords) {
+			var root = JSON.parse(strTrie);
+			var cur = root;
+			var count = 0;
+			for(var i = 0; i < strToSearch.length; i++) {
+				var c = strToSearch[i].toLowerCase();
+				if(!c.match(/[0-9A-Za-z]/)) {
+					if(cur.end_state) {
+						cur.end_state = false;
+						if(++count == numwords)
+							break;
+					}
+					if(cur.children.hasOwnProperty(c)) {
+						cur = cur.children[c];
+					} else {
+						cur = root;
+					}
+				} else {
+					if(cur.children.hasOwnProperty(c)) {
+						cur = cur.children[c];
+					} else {
+						while(++i < strToSearch.length && strToSearch[i].match(/[0-9A-Za-z]/));
+						cur = root;
+					}
+				}
+			}
+			if(cur.end_state) {
+				count++;
+			}
+			return numwords == count;
+		}
+		
+		ReactDOM.render(<OuterArea socket={socket} />, document.getElementById("main"));
+		</script>
+	</body>
+</html>

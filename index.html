@@ -1,0 +1,270 @@
+<html>
+	<head>
+		<title>Beyond</title>
+		<link rel="icon" href="/faceicons/favicon.png">
+		<style>
+			body {
+				background-color: black;
+				margin: 0 0 0 0;
+			}
+			div {
+				display: block;
+				float: left;
+				height: auto;
+				width: 100%;
+				background-color: black;
+				color: white;
+			}
+			div.options{
+				height: 100%;
+				display: flex;
+				flex-direction: column;
+			}
+			div.charlist{
+				flex-grow: 1;
+				overflow-y: auto;
+				height: calc(100% - 54px);
+			}
+			div.playlist{
+				flex-grow: 1;
+				overflow-y: auto;
+				height: calc(100% - 54px);
+			}
+			div.character{
+				padding: 5 0 5 0;
+			}
+			div.chargroup{
+				padding: 5 0 5 0;
+				cursor: default;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+			.group{
+				font-size: 20px;
+				font-weight: bold;
+			}
+			div.derivative{
+				height:50px;
+				line-height: 50px;
+			}
+			div.derivative span{
+				pointer-events: none;
+				height:50px;
+				width: calc(100% - 50px);
+				margin: 0;
+				border: 0;
+				color: white;
+				display: inline-block;
+				vertical-align: middle;
+				line-height: normal;
+			}
+			div.action, div.dice, div.log, div.narration {
+				font-weight: bold;
+			}
+			div.narration {
+				text-align: center;
+			}
+			div.whisper{
+				font-size: 12px;
+			}
+			div.system {
+
+			}
+			div#OI{
+				height: 100%;
+				max-width: calc(100% - 10px);
+			}
+			div#left{
+				max-width: calc(100% - 10px);
+			}
+			div#IC, div#OOC{
+				max-height: calc(100% - 10px);
+			}
+			div.OOCbox{
+				overflow-y: auto;
+				overflow-x: hidden;
+				height: 100%;
+			}
+			div.ICbox{
+				overflow-y: auto;
+				overflow-x: hidden;
+				height: 100%;
+			}
+			input {
+				background-color: white;
+				color: black;
+				border: 0;
+			}
+			input.OOCbar {
+				background-color: #8080FF;
+				color: black;
+				height: 19px;
+				width: 100%;
+				padding: 0 0 0 0;
+				border-style: solid;
+				border-width: 2px 0px;
+				border-color: #d3d3d3;
+			}
+			input[type=text].OOCbar::-webkit-input-placeholder {
+				color: black;
+			}
+			input[type=text].OOCbar::-moz-placeholder {
+				color: black;
+			}
+			input[type=text].OOCbar:-moz-placeholder {
+				color: black;
+			}
+			input.OOCbar:focus {
+				outline-width: 0;
+			}
+			ul.tab{
+			    list-style-type: none;
+			    margin: 0;
+			    padding: 0;
+			    overflow: hidden;
+			    background-color: black;
+			}
+			ul.tab li {
+				transition: 0.3s;
+			}
+			ul.tab li:hover{background-color: #555;}
+			ul.tab li div{
+				text-align: center;
+				border: 1px solid #333;
+				cursor: default;
+				font-size: 10pt;
+				display: inline-block;
+				color: white;
+				transition: 0.3s;
+				background-color: black;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+			ul.tab li div:hover{background-color: #555;}
+			.gutter {
+				background-color: #d3d3d3;
+			}
+			.gutter.gutter-horizontal{
+				height: 100%;
+				cursor: ew-resize;
+			}
+			.gutter.gutter-vertical{
+				cursor: ns-resize;
+			}
+			.modalContainer{
+				z-index: 1;
+				position: fixed;
+				pointer-events: none;
+				background: none;
+			}
+			.modal {
+				pointer-events: auto;
+				z-index: 1;
+				position: fixed;
+				display: block;
+				width: auto;
+				overflow: hidden;
+				background-color: rgb(0,0,0);
+				background-color: rgba(50,50,50,0.8);
+			}
+			div.contextMenu{
+				z-index: 1000;
+				position: fixed;
+				width: auto;
+			}
+			div.contextOption{
+				border: 1px solid #333;
+				transition: 0.3s;
+				padding: 0 5;
+				float: none;
+				cursor: default;
+				width: auto;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+			div.contextOption:hover{
+				background-color: #555;
+			}
+			.Red{
+				background-color:red;
+				border-color:red;
+			}
+			.Green{
+				background-color:#0f0;
+				border-color:#0f0;
+			}
+			.Button{
+				outline:0;
+			}
+			.mtitle{
+				text-align: center;
+				cursor: default;
+				pointer-events: none;
+				white-space: nowrap;
+			}
+			div.PLentry{
+				text-align: center;
+				cursor: default;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+			.Command{
+				border: 0;
+				padding: 2 0;
+				color: #d3d3d3;
+				transition: 0.3s;
+				cursor: pointer;
+				-webkit-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+			}
+			input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{
+				-webkit-appearance: none;
+				margin: 0;
+			}
+			input[type=number]{
+				-moz-appearance: textfield;
+				margin: 0;
+			}
+			input.char, select.char{
+				float: right;
+				width: 60%;
+				padding: 0;
+				border: 0;
+				height:17px;
+			}
+			input.room, select.room{
+				position: absolute;
+				right: 0px;
+				top: 0px;
+				width: 30%;
+				padding: 0;
+				border: 0;
+				height:17px;
+			}
+			.Command:hover{
+				color: white;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="main"></div>
+
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="http://www.myersdaily.org/joseph/javascript/md5.js"></script>
+		<script src="http://nathancahill.github.io/Split.js/split.js"></script>
+		<script src="http://www.lalit.org/wordpress/wp-content/uploads/2008/05/fontdetect.js"></script>
+		<script src="https://unpkg.com/react@15.3.2/dist/react.js"></script>
+		<script src="https://unpkg.com/react-dom@15.3.2/dist/react-dom.js"></script>
+		<script src="/client.js"></script>
+	</body>
+</html>
